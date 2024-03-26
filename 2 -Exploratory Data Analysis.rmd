@@ -1,0 +1,379 @@
+---
+title: "IDSProject"
+output:
+  word_document: default
+  html_document: default
+date: "2023-12-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+#EDA
+
+```{r pressure, echo=FALSE}
+# Load libraries
+library(arrow)
+library(tidyverse)
+```
+
+```{r}
+data <- read_csv("C:/Users/Himanshu/OneDrive/Desktop/Syracuse Sem 1/IST-687 Intro to DS Lab/Final Project/static_house_energy_weather_df_17130_rows_with_time_of_day.csv", show_col_types = FALSE)
+#summary(data)
+View(data)
+
+cols_req = c('bldg_id', 'in.sqft', 'in.bedrooms', 'in.building_america_climate_zone', 'in.ceiling_fan','in.census_region', 'in.city', 'in.clothes_dryer', 'in.clothes_washer', 'in.clothes_washer_presence', 'in.cooking_range', 'in.cooling_setpoint', 'in.cooling_setpoint_has_offset', 'in.cooling_setpoint_offset_magnitude', 'in.cooling_setpoint_offset_period', 'in.dishwasher', 'in.ducts', 'in.emissions_fuel_oil_values', 'in.emissions_natural_gas_values', 'in.emissions_propane_values', 'in.emissions_wood_values', 'in.federal_poverty_level', 'in.geometry_attic_type', 'in.geometry_floor_area', 'in.geometry_floor_area_bin', 'in.geometry_foundation_type', 'in.geometry_garage', 'in.geometry_stories', 'in.geometry_wall_exterior_finish', 'in.geometry_wall_type', 'in.has_pv', 'in.heating_fuel', 'in.heating_setpoint', 'in.heating_setpoint_has_offset', 'in.heating_setpoint_offset_magnitude', 'in.heating_setpoint_offset_period', 'in.hot_water_fixtures', 'in.hvac_cooling_efficiency', 'in.hvac_cooling_partial_space_conditioning', 'in.hvac_cooling_type', 'in.hvac_has_ducts', 'in.hvac_has_zonal_electric_heating', 'in.hvac_heating_efficiency', 'in.hvac_heating_type', 'in.hvac_heating_type_and_fuel', 'in.income', 'in.infiltration', 'in.insulation_ceiling', 'in.insulation_floor', 'in.insulation_foundation_wall', 'in.insulation_rim_joist', 'in.insulation_roof', 'in.insulation_slab', 'in.insulation_wall', 'in.interior_shading', 'in.misc_extra_refrigerator', 'in.misc_freezer', 'in.misc_gas_fireplace', 'in.misc_gas_grill', 'in.misc_gas_lighting', 'in.misc_hot_tub_spa', 'in.misc_pool', 'in.misc_pool_heater', 'in.misc_pool_pump', 'in.misc_well_pump', 'in.natural_ventilation', 'in.neighbors', 'in.occupants', 'in.orientation', 'in.plug_load_diversity',  'in.pv_orientation', 'in.pv_system_size', 'in.refrigerator', 'in.roof_material', 'in.tenure', 'in.units_represented', 'in.usage_level', 'in.vacancy_status', 'in.vintage', 'in.vintage_acs', 'in.water_heater_efficiency', 'in.water_heater_fuel',  'in.window_areas', 'in.windows', 'upgrade.insulation_roof', 'upgrade.water_heater_efficiency', 'upgrade.hvac_cooling_efficiency', 'upgrade.infiltration_reduction', 'upgrade.geometry_foundation_type', 'upgrade.clothes_dryer', 'upgrade.insulation_ceiling', 'upgrade.ducts', 'upgrade.hvac_heating_type', 'upgrade.insulation_wall', 'upgrade.insulation_foundation_wall', 'upgrade.hvac_heating_efficiency', 'upgrade.cooking_range', 'time_of_day', 'total_energy_consumption', 'dry_bulb_temperature_[°c]', 'relative_humidity_[%]', 'wind_speed_[m/s]', 'wind_direction_[deg]', 'global_horizontal_radiation_[w/m2]', 'direct_normal_radiation_[w/m2]', 'diffuse_horizontal_radiation_[w/m2]')
+
+filtered_data <- select(data, all_of(cols_req))
+
+#summary(filtered_data)
+
+columns_to_remove <- c("in.units_represented")
+filtered_data <- filtered_data[, !names(filtered_data) %in% columns_to_remove]
+```
+
+
+
+```{r}
+
+# Assuming filtered_data is your dataframe
+
+# Select string columns
+string_columns <- names(filtered_data)[sapply(filtered_data, is.character)]
+num_columns <- names(filtered_data)[sapply(filtered_data, is.numeric)]
+
+# Loop through each string column
+for (col in string_columns) {
+  p_c <- (which(string_columns == col)) / length(string_columns) * 100
+  print(paste(col, p_c, '%'))
+  
+  # Plotting mean of total_energy_consumption per group
+  aggregate(filtered_data$total_energy_consumption ~ filtered_data[[col]], data = filtered_data, FUN = mean) -> temp
+  barplot(temp[, 2], names.arg = temp[, 1], main = paste('Bar Plot: Mean of total_energy_consumption per', col), xlab = col, ylab = 'Sum of total_energy_consumption', col = 'skyblue')
+  
+  # Plotting count per group
+  table(filtered_data[[col]]) -> count_data
+  barplot(count_data, main = paste('Count per', col), xlab = col, ylab = 'Count', col = 'skyblue')
+}
+
+```
+
+```{r}
+# Handling Null Values
+
+null_values_count <- sapply(filtered_data, function(x) sum(is.na(x)))
+null_values_count[null_values_count>0]
+
+# frequency_table <- table(filtered_data$in.occupants)
+# most_frequent_value <- names(frequency_table[which.max(frequency_table)])
+
+# replacing null value with the most frequent value
+filtered_data$upgrade.water_heater_efficiency[is.na(filtered_data$upgrade.water_heater_efficiency)] <- 'Electric Heat Pump, 50 gal, 3.45 UEF'
+filtered_data$upgrade.cooking_range[is.na(filtered_data$upgrade.cooking_range)] <- 'Electric, Induction, 100% Usage'
+
+filtered_data$in.occupants[is.na(filtered_data$in.occupants)] <- 1
+
+# removing columns with high null values(> 500)
+columns_to_remove <- c("upgrade.insulation_roof", "upgrade.geometry_foundation_type", "upgrade.insulation_wall", "upgrade.insulation_foundation_wall","upgrade.infiltration_reduction", "upgrade.clothes_dryer", "upgrade.insulation_ceiling", "upgrade.ducts", "upgrade.hvac_heating_type")
+
+filtered_data <- filtered_data[, !names(filtered_data) %in% columns_to_remove]
+```
+
+```{r}
+# find number of character variables
+non_numeric_cols <- sapply(filtered_data, function(x) !is.numeric(x) && !is.integer(x))
+non_num_col_names <- names(filtered_data)[non_numeric_cols] # 86 cols
+char_cols <- filtered_data[, non_num_col_names]
+
+# converting in.occupants to numeric
+filtered_data$in.occupants <- as.numeric(filtered_data$in.occupants)
+
+# find variables with just 1 unique value
+unique_counts <- list()
+for(column_name in names(char_cols)) {
+    if(is.factor(char_cols[[column_name]]) || is.character(char_cols[[column_name]])) {
+        unique_counts[[column_name]] <- length(unique(char_cols[[column_name]]))
+    }
+}
+
+# removing variables having only 1 unique value
+columns_to_remove <- names(unique_counts[unique_counts == 1])
+filtered_data <- filtered_data[, !names(filtered_data) %in% columns_to_remove]
+
+for(column_name in names(df)) {
+    df[[column_name]] <- as.factor(df[[column_name]])
+}
+```
+
+```{r}
+# One-hot-encoding
+
+library(caret)
+dummy_model <- dummyVars("~ .", data = filtered_data)
+transformed_data <- predict(dummy_model, newdata = filtered_data)
+transformed_data <- as.data.frame(transformed_data)
+
+```
+
+```{r}
+# Correlation Analysis
+#install.packages("ltm")
+#library(ltm)
+library(dplyr)
+#install.packages("polycor")
+library(polycor)
+
+target <- transformed_data$total_energy_consumption
+
+# Initialize an empty vector to store correlations
+correlations <- numeric()
+
+# Initialize an empty vector to store variable names
+variable_names <- character()
+
+# Loop through columns and calculate correlations
+for (col_name in names(transformed_data)) {
+  col <- transformed_data[[col_name]]
+  
+  if (is.numeric(col)) {
+    # Calculate numeric correlations (Pearson)
+    correlation <- cor(col, target, method = "pearson")
+  } else {
+    # Handle categorical variables (e.g., point-biserial correlation)
+    correlation <- point.biserial(target, col)
+  }
+  
+  # Store the correlation value and variable name
+  correlations <- c(correlations, correlation)
+  variable_names <- c(variable_names, col_name)
+}
+
+# Combine correlations with variable names into a data frame
+correlations_df <- data.frame(Variable = variable_names, Correlation = correlations)
+
+# Sort correlations by absolute value in descending order
+correlations_df <- correlations_df[order(-abs(correlations_df$Correlation)),]
+
+# View(correlations_df)
+# Print the top correlated variables
+print(head(correlations_df, n = 30))
+
+#write.csv(filtered_data, "C:/Users/Deep/Desktop/Sem-1 SYR/Intro to DS Lab/Project/clean_data.csv")
+```
+
+
+```{r}
+# List of predictor columns
+predictors <- c("`diffuse_horizontal_radiation_[w/m2]`", 
+                "`global_horizontal_radiation_[w/m2]`", 
+                "`dry_bulb_temperature_[°c]`", 
+                "`direct_normal_radiation_[w/m2]`", 
+                "`relative_humidity_[%]`",
+                "`wind_speed_[m/s]`",
+                "in.sqft",
+                "in.heating_setpoint",
+                "in.cooling_setpoint",
+                "in.bedrooms",
+                "in.heating_setpoint",
+                "in.cooling_setpoint")
+
+# Loop through each predictor and create a scatter plot
+for (predictor in predictors) {
+  plot <- ggplot(filtered_data, aes_string(x = predictor, y = "total_energy_consumption")) +
+    geom_point(aes(color = predictor), alpha = 0.6) +  # Add color and set transparency
+    geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add linear regression line
+    labs(title = paste("Scatter plot of Total Energy Consumption vs", predictor),
+         x = predictor,
+         y = "Total Energy Consumption") +
+    theme_minimal()
+  
+  print(plot)
+}
+
+```
+
+```{r}
+predictors <- c("time_of_day",
+                "in.geometry_floor_area",
+                "in.geometry_floor_area_bin",
+                "in.vacancy_status",
+                "in.ceiling_fan",
+                "in.vacancy_status",
+                "in.hot_water_fixtures",
+                "in.plug_load_diversity",
+                "in.usage_level",
+                "upgrade.cooking_range",
+                "in.clothes_dryer",
+                "in.income")
+
+for (predictor in predictors) {
+  plot <- ggplot(data, aes_string(x = predictor, y = "total_energy_consumption", fill = predictor)) +
+    geom_boxplot(outlier.shape = NA, varwidth = TRUE, notch = TRUE) +  # Varying width and notch
+    scale_fill_viridis_d() +  # Use Viridis color palette
+    labs(title = paste("Box plot of Total Energy Consumption by", predictor),
+         x = predictor,
+         y = "Total Energy Consumption") +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(plot)
+}
+```
+
+```{r}
+ggplot(data, aes(x = total_energy_consumption)) +
+  geom_histogram(bins = 50, fill = "blue", color = "black") +
+  labs(title = "Histogram of Total Energy Consumption",
+       x = "Total Energy Consumption",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+library(corrplot)
+
+continuous_variables <- c("`diffuse_horizontal_radiation_[w/m2]`",
+                          "`global_horizontal_radiation_[w/m2]`", 
+                          "`dry_bulb_temperature_[°c]`", 
+                          "`direct_normal_radiation_[w/m2]`", 
+                          "`relative_humidity_[%]`",
+                          "`wind_speed_[m/s]`",
+                          "in.income")
+# 
+continuous_variables <- c("diffuse_horizontal_radiation_[w/m2]",
+                          "global_horizontal_radiation_[w/m2]",
+                          "dry_bulb_temperature_[°c]",
+                          "direct_normal_radiation_[w/m2]",
+                          "relative_humidity_[%]",
+                          "wind_speed_[m/s]",
+                          "in.income")
+#
+continuous_data <- filtered_data[, c("total_energy_consumption",
+                                 continuous_variables)]
+# 
+# 
+# cor_matrix <- cor(continuous_data, use = "complete.obs")
+# 
+# corrplot(cor_matrix, method = "color")
+# 
+# 
+# corrplot(cor_matrix, method = "color",
+#          addCoef.col = "black",        # Add correlation coefficients
+#          tl.col = "black",             # Color of text labels
+#          tl.srt = 45,                  # Rotate text labels
+#          cl.lim = c(-1, 1),            # Set limits for color scale
+#          col = colorRampPalette(c("blue", "white", "red"))(200))
+# continuous_variables <- c("`diffuse_horizontal_radiation_[w/m2]`",
+#                           "`global_horizontal_radiation_[w/m2]`", 
+#                           "`dry_bulb_temperature_[°c]`", 
+#                           "`direct_normal_radiation_[w/m2]`", 
+#                           "`relative_humidity_[%]`",
+#                           "`wind_speed_[m/s]`",
+#                           "in.income")
+```
+
+```{r}
+ggplot(filtered_data, aes(x = time_of_day, y = total_energy_consumption)) +
+  geom_line() +
+  labs(title = "Time Series of Total Energy Consumption",
+       x = "Time",
+       y = "Total Energy Consumption") +
+  theme_minimal()
+```
+
+```{r}
+# install.packages("GGally")
+# library(GGally)
+# 
+# # Select a subset of variables for the pair plot
+# selected_data <- data[, continuous_vars]
+# 
+# ggpairs(continuous_vars,
+#         lower = list(continuous = "points", combo = "box"),  # Custom lower panel
+#         upper = list(continuous = "cor", combo = "facethist"),  # Custom upper panel
+#         diag = list(continuous = "densityDiag"),  # Custom diagonal
+#         progress = FALSE) +
+#   theme_light()
+```
+
+```{r}
+categorical_variables <- c("time_of_day",
+                      "in.geometry_floor_area",
+                      "in.geometry_floor_area_bin",
+                      "in.vacancy_status",
+                      "in.ceiling_fan",
+                      "in.hot_water_fixtures",
+                      "in.plug_load_diversity",
+                      "in.usage_level",
+                      "upgrade.cooking_range",
+                      "in.clothes_dryer",
+                      "in.income",
+                      "in.bedrooms",
+                      "in.heating_setpoint",
+                      "in.cooling_setpoint",
+                      "in.cooking_range")
+
+# Loop for bar plots with a continuous color scale
+for (cat_var in categorical_variables) {
+  # Convert the categorical variable to a numeric type for coloring
+  data[[paste0(cat_var, "_num")]] <- as.numeric(as.factor(data[[cat_var]]))
+
+  plot <- ggplot(data, aes_string(x = cat_var, y = filtered_data$total_energy_consumption, fill = paste0(cat_var, "_num"))) +
+    geom_bar(stat = "summary", fun = "mean", position = position_dodge(), color = "black") +
+    geom_errorbar(stat = "summary", fun.data = "mean_se", fun.args = list(mult = 1), position = position_dodge(0.9), width = 0.25) +
+    scale_fill_gradient(low = "blue", high = "red") +  # Continuous color scale
+    labs(title = paste("Average of", "target_variable", "by", cat_var),
+         x = cat_var,
+         y = "Average target_variable") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+  # Remove the temporary numeric column
+  data[[paste0(cat_var, "_num")]] <- NULL
+
+  print(plot)
+}
+
+```
+
+
+```{r}
+#install.packages("plotly")
+# library(plotly)
+# 
+# plot_ly(filtered_data, x = ~`dry_bulb_temperature_[°c]`, y = ~total_energy_consumption, z = ~`time_of_day`,
+#         type = 'scatter3d', mode = 'markers',
+#         marker = list(size = 2, color = ~`time_of_day`, colorscale = 'Viridis')) %>%
+#   layout(title = '3D Scatter Plot',
+#          scene = list(xaxis = list(title = 'Dry Bulb Temperature [°C]'),
+#                       yaxis = list(title = 'Total Energy Consumption'),
+#                       zaxis = list(title = 'Time of Day')))
+
+continuous_variables <- c("`diffuse_horizontal_radiation_[w/m2]`",
+                          "`global_horizontal_radiation_[w/m2]`", 
+                          "`dry_bulb_temperature_[°c]`", 
+                          "`direct_normal_radiation_[w/m2]`", 
+                          "`relative_humidity_[%]`",
+                          "`wind_speed_[m/s]`",
+                          "in.income")
+
+for (var in continuous_variables) {
+  plot <- ggplot(filtered_data, aes_string(x = var, y = filtered_data$total_energy_consumption, color = "time_of_day")) +
+    geom_point() +
+    labs(title = paste("Total Energy Consumption vs", var, "by Time of Day"),
+         x = var,
+         y = "Total Energy Consumption") +
+    scale_color_brewer(palette = "Set1") +
+    theme_minimal() +
+    theme(legend.position = "right")
+  
+  print(plot)
+}
+
+```
+
+

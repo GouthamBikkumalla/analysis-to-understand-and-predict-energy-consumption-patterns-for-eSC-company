@@ -1,0 +1,388 @@
+---
+title: "IDS Data Load"
+output: html_document
+date: "2023-11-28"
+---
+
+
+
+
+
+#Load Libraries
+```{r}
+# install.packages("arrow")
+# install.packages("lobstr")
+# install.packages('curl')
+# install.packages('httr')
+# install.packages('xml2')
+# install.packages("aws.s3", repos = c("cloudyr" = "http://cloudyr.github.io/drat"))
+library(arrow)
+library(tidyverse)
+library(lobstr)
+library(imputeTS)
+library(curl)
+library(httr)
+library(xml2)
+library(aws.s3)
+
+```
+
+
+
+#1.Load Data 
+```{r}
+# 1. Static House Data
+house_data_path <-  "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/static_house_info.parquet"
+static_house_data <-  read_parquet(house_data_path)
+
+# 2. Energy Usage Data
+energy_usage_path <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/121.parquet"
+energy_usage_data <-  read_parquet(energy_usage_path)
+
+
+# 3. Meta Data
+meta_data_path <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/data_dictionary.csv"
+input_df_metadata <- read_csv(meta_data_path,show_col_types = FALSE)
+meta_data_df=as.data.frame(input_df_metadata)
+
+
+# 4. Weather Data
+
+weather_data_path <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weatherdata/G4500910.csv"
+
+
+weather_data=read_csv(paste('https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/',"G4500910",'.csv',sep=''),show_col_types = FALSE)
+
+# input_df_weather <- read_csv("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weatherdata/G4500910.csv",show_col_types = FALSE)
+# # input_df_weather <- read.csv(weather_data_path)
+# weather_df=as.data.frame(input_df_weather)
+
+# summary(static_house_data)
+# aa <-  read.csv(weather_data_path,sep = ",")
+
+```
+
+#2.Load Weather Dataset
+
+```{r}
+
+unique_county_id <- unique(static_house_data$in.county)
+class(unique_county_id)
+paste0(length(unique_county_id))
+weather_path = "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weatherdata/"
+list_of_dfs_final <-  list()
+
+i <-  0
+start_time_outer <-  Sys.time()
+
+# As Code takes a lot of time to run and times out -> run in 5 iterations
+# iteration_list <- list(1000,2000,3000,4000,5000,6000)
+iteration_list <- list(40,47)
+
+
+for (iter in iteration_list){
+
+  start_time_inner <-  Sys.time()
+
+  list_of_dfs <-  list()
+  cat("---------------------------------------------> New Iter : ",iter)
+  # Filter parent list for each iteration - This is the list of Buildings that we will load
+  if (i ==0){
+    county_id_filtered_list <-unique_county_id[0:iter]
+  }else if (iter>length(unique_county_id)) {
+    county_id_filtered_list <-unique_county_id[prev_iter:length(unique_county_id)]
+  }else {
+    county_id_filtered_list <-unique_county_id[prev_iter:iter]
+  }
+
+  # Save Previous iteration index for above step
+  prev_iter <- iter
+  i <-  0
+
+  # All elems in county_id_filtered_list
+  for (elem in county_id_filtered_list) {
+
+    path = paste0(weather_path , as.character(elem) , ".csv" )
+    i <-  i + 1
+    completition_status <-  i*100/length(county_id_filtered_list)
+    print(path)
+    cat( " Complettion Status : ",completition_status,"%"," iteration : ",iter, " where i = ",i)
+
+    #Filter for July and add Building Number
+    df <-  read_csv(paste('https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/',as.character(elem),'.csv',sep=''),show_col_types = FALSE)
+    # df <-  subset(df,grepl("2018-07",date_time))
+    df <- df %>%
+    filter(format(as.Date(date_time), "%m") == "07")
+    df$county_id <-  elem
+    cat(" Datatype of df : ",class(df))
+
+
+
+    # Add DF to List
+    list_of_dfs[[i]] <-  df
+
+    #Break Loop at 10% completion
+    # if (completition_status > iter) {break}
+  }
+
+  end_time_inner <-  Sys.time()
+  cat("Time taken Inner:", end_time_inner-start_time_inner)
+
+  #Concat Dataframes
+  pre_final_df <-  do.call(rbind,list_of_dfs)
+
+  # Add DF to Master List
+  list_of_dfs_final[[i]] <-  pre_final_df
+
+  #Size of DF - Check
+  size_in_gb <- obj_size(pre_final_df, units = "MB") / 1024
+  cat("DF Size : ",size_in_gb)
+
+}
+
+
+
+end_time_outer <-  Sys.time()
+cat("Time taken Outer:", end_time_outer-start_time_outer)
+
+final_df <-  do.call(rbind,list_of_dfs_final)
+
+```
+
+
+#3.Load Energy Dataset
+
+```{r}
+# Unique Buildings
+unique_building_id <- unique(static_house_data$bldg_id)
+class(unique_building_id)
+paste0(length(unique_building_id))
+
+energy_path = "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/"
+list_of_dfs_final <-  list()
+
+i <-  0
+start_time_outer <-  Sys.time()
+
+# As Code takes a lot of time to run and times out -> run in 5 iterations
+# iteration_list <- list(1000,2000,3000,4000,5000,6000)
+iteration_list <- list(2000,4000,5720)
+
+
+for (iter in iteration_list){
+
+  start_time_inner <-  Sys.time()
+
+  list_of_dfs <-  list()
+  cat("---------------------------------------------> New Iter : ",iter)
+  # Filter parent list for each iteration - This is the list of Buildings that we will load
+  if (i ==0){
+    building_id_filtered_list <-unique_building_id[0:iter]
+  }else if (iter>length(unique_building_id)) {
+    building_id_filtered_list <-unique_building_id[prev_iter:length(unique_building_id)]
+  }else {
+    building_id_filtered_list <-unique_building_id[prev_iter:iter]
+  }
+
+  # Save Previous iteration index for above step
+  prev_iter <- iter
+  i <-  0
+
+  # All elems in building_id_filtered_list
+  for (elem in building_id_filtered_list) {
+
+    path = paste0(energy_path , as.character(elem) , ".parquet" )
+    i <-  i + 1
+    completition_status <-  i*100/length(building_id_filtered_list)
+    print(path)
+    cat( " Complettion Status : ",completition_status,"%"," iteration : ",iter, " where i = ",i)
+
+    #Filter for July and add Building Number
+    df <-  read_parquet(path)
+    df <-  subset(df,grepl("2018-07",time))
+    df$bldg_id <-  elem
+    cat(" Datatype of df : ",class(df))
+
+
+
+    # Add DF to List
+    list_of_dfs[[i]] <-  df
+
+    #Break Loop at 10% completion
+    # if (completition_status > iter) {break}
+  }
+
+  end_time_inner <-  Sys.time()
+  cat("Time taken Inner:", end_time_inner-start_time_inner)
+
+  #Concat Dataframes
+  pre_final_df <-  do.call(rbind,list_of_dfs)
+
+  # Add DF to Master List
+  list_of_dfs_final[[i]] <-  pre_final_df
+
+  #Size of DF - Check
+  size_in_gb <- obj_size(pre_final_df, units = "MB") / 1024
+  cat("DF Size : ",size_in_gb)
+
+}
+
+
+
+end_time_outer <-  Sys.time()
+cat("Time taken Outer:", end_time_outer-start_time_outer)
+
+final_df <-  do.call(rbind,list_of_dfs_final)
+
+
+```
+
+
+
+
+
+# 4.Process above weather data
+```{r}
+# 3. Read Weather Data
+weather_raw_data <-  read_csv("C:/Users/Himanshu/OneDrive/Desktop/Syracuse Sem 1/IST-687 Intro to DS Lab/Final Project/weather_data.csv",show_col_types = FALSE)
+colnames(weather_raw_data)[colnames(weather_raw_data) == "county_id"] <- "in.county"
+colnames(weather_raw_data)[colnames(weather_raw_data) == "date_time"] <- "time"
+colnames(weather_raw_data) <- gsub(" ", "_", tolower(colnames(weather_raw_data)))
+# 4. Read Energy Data
+
+energy_raw_data <-  read_csv("C:/Users/Himanshu/OneDrive/Desktop/Syracuse Sem 1/IST-687 Intro to DS Lab/Final Project/energy_usage_data_2.csv",show_col_types = FALSE)
+```
+
+
+# 5.Process Energy Data
+```{r}
+# str(energy_raw_data)
+
+# Select columns to sum (excluding 'time' and 'bldg_id')
+columns_to_sum <- energy_raw_data[, !colnames(energy_raw_data) %in% c('time', 'bldg_id')]
+
+# Add a new column named 'sum_of_columns' to the data frame
+energy_raw_data$total_energy_consumption <- rowSums(columns_to_sum, na.rm = TRUE)
+
+energy_raw_data <-  energy_raw_data[,c('time', 'bldg_id','total_energy_consumption')]
+rm(columns_to_sum)
+
+#Create 2 datasets - 1 Building aggregated energy, 2 - Morning, Afternoon,Night Dataset
+energy_raw_data_aggregated <- energy_raw_data %>%  group_by(bldg_id) %>% 
+  mutate(total_energy_consumption = sum(total_energy_consumption))
+
+energy_raw_data_aggregated <-  energy_raw_data_aggregated[!duplicated(energy_raw_data_aggregated$bldg_id), ]
+energy_raw_data_aggregated <- energy_raw_data_aggregated[,c('bldg_id','total_energy_consumption')]
+
+
+#Second Data with Morning Afternoon Evening Split
+energy_raw_data_aggregated_split_4_time_period <- energy_raw_data
+energy_raw_data_aggregated_split_4_time_period$hour <- as.numeric(format(energy_raw_data_aggregated_split_4_time_period$time, format = "%H"))
+
+
+energy_raw_data_aggregated_split_4_time_period <- energy_raw_data_aggregated_split_4_time_period %>%
+  mutate(time_of_day = case_when (energy_raw_data_aggregated_split_4_time_period$hour>=04 & energy_raw_data_aggregated_split_4_time_period$hour<=12~'morning',energy_raw_data_aggregated_split_4_time_period$hour>12 & energy_raw_data_aggregated_split_4_time_period$hour<=20~'afternoon-evening',energy_raw_data_aggregated_split_4_time_period$hour>20 | energy_raw_data_aggregated_split_4_time_period$hour<=04~'night',TRUE ~'other'))
+energy_raw_data_aggregated_split_4_time_period <- energy_raw_data_aggregated_split_4_time_period %>%  group_by(bldg_id,time_of_day) %>% 
+  mutate(total_energy_consumption = sum(total_energy_consumption))
+
+energy_raw_data_aggregated_split_4_time_period <-  energy_raw_data_aggregated_split_4_time_period[!duplicated(energy_raw_data_aggregated_split_4_time_period[c('bldg_id','time_of_day')]), ]
+energy_raw_data_aggregated_split_4_time_period <- energy_raw_data_aggregated_split_4_time_period[,c('bldg_id','time_of_day','total_energy_consumption')]
+str(energy_raw_data_aggregated_split_4_time_period)
+
+
+
+```
+
+
+# 6.Process Weather Data
+```{r}
+#Process Weather Data
+colnames(weather_raw_data)
+#Create 2 datasets - 1 Building aggregated energy, 2 - Morning, Afternoon,Night Dataset
+exclude_columns <- c("in.county", "time")
+
+# Use dplyr to group by 'Group' and calculate the average for other columns
+weather_raw_data_aggregated <- weather_raw_data %>%
+  group_by(in.county) %>%
+  summarise(across(
+    .cols = setdiff(names(.), exclude_columns),
+    .fns = mean
+  ))
+
+weather_raw_data_aggregated <-  weather_raw_data_aggregated[!duplicated(weather_raw_data_aggregated$in.county), ]
+
+
+
+#Second Data with Morning Afternoon Evening Split
+weather_raw_data_aggregated_split_4_time_period <- weather_raw_data
+weather_raw_data_aggregated_split_4_time_period$hour <- as.numeric(format(weather_raw_data_aggregated_split_4_time_period$time, format = "%H"))
+
+
+weather_raw_data_aggregated_split_4_time_period <- weather_raw_data_aggregated_split_4_time_period %>%
+  mutate(time_of_day = case_when (weather_raw_data_aggregated_split_4_time_period$hour>=04 & weather_raw_data_aggregated_split_4_time_period$hour<=12~'morning',weather_raw_data_aggregated_split_4_time_period$hour>12 & weather_raw_data_aggregated_split_4_time_period$hour<=20~'afternoon-evening',weather_raw_data_aggregated_split_4_time_period$hour>20 | weather_raw_data_aggregated_split_4_time_period$hour<=04~'night',TRUE ~'other'))
+
+exclude_columns <- c("in.county", "time","hour","time_of_day")
+weather_raw_data_aggregated_split_4_time_period <- weather_raw_data_aggregated_split_4_time_period %>%  group_by(in.county,time_of_day) %>% 
+  summarise(across(
+    .cols = setdiff(names(.), exclude_columns),
+    .fns = mean
+  ))
+
+
+
+
+
+```
+
+
+# 7.Join the static house and Energy Data
+```{r}
+#Static_house_energy join
+a = Sys.time()
+static_house_energy_df <-  inner_join(static_house_data, energy_raw_data_aggregated_split_4_time_period, by = c('bldg_id'))
+
+rm(energy_raw_data)
+rm(static_house_data)
+print(Sys.time()-a)
+# View(static_house_energy_df)
+
+library(lobstr)
+size_in_gb <- obj_size(static_house_energy_df, units = "MB") / 1024
+cat("DF Size : ",size_in_gb)
+```
+
+
+
+#8.Join to Weather Data
+```{r}
+#static_house_energy_weather join
+a = Sys.time()
+
+static_house_energy_weather_df <-  inner_join(static_house_energy_df, weather_raw_data_aggregated_split_4_time_period, by= c('in.county','time_of_day'))
+
+rm(static_house_energy_df)
+print(Sys.time()-a)
+
+
+
+library(lobstr)
+size_in_gb <- obj_size(static_house_energy_weather_df, units = "MB") / 1024
+cat("DF Size : ",size_in_gb)
+
+# str(static_house_energy_weather_df)
+```
+
+```{r}
+# write.csv(static_house_energy_weather_df, file = "C:/Users/Himanshu/OneDrive/Desktop/Syracuse Sem 1/IST-687 Intro to DS Lab/Final Project/static_house_energy_weather_df_17130_rows_with_time_of_day.csv",row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,832 @@
+---
+title: "Energy Usage Analysis - Feature Engineering + Modelling + Insight Generation"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+date: "2023-12-01"
+---
+### Group : IST687 M004 Group 1
+
+## Contents
+
+###  1.Install Dependancies
+###  2.Data Cleaning + Feature Engineering
+###  3.Exploratory Data Analysis
+###  4.Modelling
+###  5.Insight Generation
+###  6.Prediction - Future Energy Consumption
+
+
+
+
+##----------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+
+
+## 1.Load Required Dependancies
+
+```{r}
+# Load required Libraries
+
+options(warn=-1)
+# install.packages("corrplot")
+# install.packages("catboost")
+# install.packages('devtools')
+# devtools::install_url('BINARY_URL'[, INSTALL_opts = c("--no-multiarch", "--no-test-load")])
+# devtools::install_url('https://github.com/catboost/catboost/releases/download/v1.2.2/catboost-R-Windows-1.2.2.tgz', INSTALL_opts = c("--no-multiarch", "--no-test-load"))
+# install.packages("xgboost")
+# install.packages("shapviz")
+library(arrow)
+library(tidyverse)
+library(lobstr)
+library(imputeTS)
+library(curl)
+library(httr)
+library(xml2)
+library(aws.s3)
+library(corrplot)
+library(xgboost)
+library(readr)
+library(stringr)
+library(dplyr)
+library(caret)
+library(car)
+library(catboost)
+library(recipes)
+library(ggplot2)
+library(shapviz)
+
+
+
+# library(knitr)
+# hook_output = knit_hooks$get('output')
+# knit_hooks$set(output = function(x, options) {
+#   # this hook is used only when the linewidth option is not NULL
+#   if (!is.null(n <- options$linewidth)) {
+#     x = xfun::split_lines(x)
+#     # any lines wider than n should be wrapped
+#     if (any(nchar(x) > n)) x = strwrap(x, width = n)
+#     x = paste(x, collapse = '\n')
+#   }
+#   hook_output(x, options)
+# })
+# 
+# knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+```
+
+
+##----------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+## 2.Data Cleaning + Feature Engineering
+
+### 2.1. Load Dataset
+```{r}
+
+static_house_energy_weather_df <- read_csv("C:/Users/Himanshu/OneDrive/Desktop/Syracuse Sem 1/IST-687 Intro to DS Lab/Final Project/static_house_energy_weather_df_17130_rows_with_time_of_day.csv",show_col_types = FALSE) 
+
+```
+
+### 2.2. Study Unique Values in Dataset
+
+```{r}
+# Unique Values
+unique_value_in_each_column <- lapply(static_house_energy_weather_df, unique)
+
+dim(static_house_energy_weather_df)
+```
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+### 2.3.
+### Removing columns based on info in metadata file and columns with only 1 value.
+### Ordinal Encode Required Columns
+### Remove Negative energy rows
+
+```{r}
+#Define Required Columns
+
+cols_req <- c('bldg_id','in.county', 'in.sqft', 'in.bedrooms',
+'in.building_america_climate_zone', 'in.ceiling_fan', 'in.city', 'in.clothes_dryer', 'in.clothes_washer', 'in.cooking_range', 'in.cooling_setpoint', 'in.cooling_setpoint_has_offset', 'in.cooling_setpoint_offset_magnitude', 'in.cooling_setpoint_offset_period', 
+'in.dishwasher', 'in.ducts', 
+ 'in.federal_poverty_level', 'in.geometry_attic_type', 'in.geometry_floor_area', 'in.geometry_floor_area_bin', 'in.geometry_foundation_type', 'in.geometry_garage', 'in.geometry_stories',
+ 'in.geometry_wall_exterior_finish', 'in.geometry_wall_type', 'in.has_pv', 'in.heating_fuel', 'in.heating_setpoint', 'in.heating_setpoint_has_offset',
+'in.heating_setpoint_offset_magnitude', 'in.heating_setpoint_offset_period', 'in.hot_water_fixtures', 'in.hvac_cooling_efficiency', 'in.hvac_cooling_partial_space_conditioning',
+'in.hvac_cooling_type', 'in.hvac_has_ducts', 'in.hvac_has_zonal_electric_heating', 'in.hvac_heating_efficiency', 'in.hvac_heating_type', 'in.hvac_heating_type_and_fuel',
+ 'in.income', 'in.infiltration', 'in.insulation_ceiling', 
+'in.insulation_floor', 'in.insulation_foundation_wall', 'in.insulation_rim_joist', 'in.insulation_roof', 'in.insulation_slab', 'in.insulation_wall', 
+'in.misc_extra_refrigerator', 'in.misc_freezer', 'in.misc_gas_fireplace',
+'in.misc_gas_grill', 'in.misc_gas_lighting', 'in.misc_hot_tub_spa', 'in.misc_pool', 'in.misc_pool_heater', 'in.misc_pool_pump', 'in.misc_well_pump', 'in.natural_ventilation', 'in.neighbors',
+'in.occupants', 'in.orientation', 'in.plug_load_diversity',  'in.pv_orientation', 'in.pv_system_size', 
+'in.refrigerator', 'in.roof_material', 'in.tenure', 'in.units_represented', 'in.usage_level', 'in.vacancy_status', 'in.vintage', 'in.vintage_acs',
+'in.water_heater_efficiency', 'in.water_heater_fuel',  'in.window_areas',
+'in.windows', 'upgrade.insulation_roof', 'upgrade.water_heater_efficiency', 'upgrade.hvac_cooling_efficiency', 'upgrade.infiltration_reduction', 'upgrade.geometry_foundation_type',
+'upgrade.clothes_dryer', 'upgrade.insulation_ceiling', 'upgrade.ducts', 'upgrade.hvac_heating_type', 'upgrade.insulation_wall', 'upgrade.insulation_foundation_wall',
+'upgrade.hvac_heating_efficiency', 'upgrade.cooking_range', 'time_of_day', 'total_energy_consumption', 'dry_bulb_temperature_[°c]', 'relative_humidity_[%]', 'wind_speed_[m/s]', 'wind_direction_[deg]', 'global_horizontal_radiation_[w/m2]',
+    'direct_normal_radiation_[w/m2]', 'diffuse_horizontal_radiation_[w/m2]')
+
+static_house_energy_weather_df2 <- static_house_energy_weather_df %>% select(all_of(cols_req))
+
+# Convert 'None' to NA
+static_house_energy_weather_df2[static_house_energy_weather_df2 == 'None'] <- NA
+
+
+
+# Function to drop columns with only one unique value
+drop_single_unique_columns <- function(data) {
+  single_unique_cols <- sapply(data, function(col) length(unique(col)) == 1)
+  return(data[, !single_unique_cols, drop = FALSE])
+}
+
+# Use the function to drop columns
+static_house_energy_weather_df2 <- drop_single_unique_columns(static_house_energy_weather_df2)
+
+# Convert time of day and other column columns to numbers - Ordinal Encoding
+time_of_day_mapping <-  c("morning"=1,"afternoon-evening"=2,"night"=3)
+in_vacancy_status_mapping <- c("Occupied"=1, "Vacant"=0 )
+in_geometry_floor_area_mapping <- c("0-499"=0 ,"500-749"=1,"750-999"=2,"1000-1499"=3,"1500-1999"=4,"2000-2499"=5,"2500-2999"=6,"3000-3999"=7,"4000+"=8)         
+in_hot_water_fixtures_mapping <- c("100% Usage"=1, "50% Usage"=0, "200% Usage"=2)
+upgrade_cooking_range_mapping <- c("Electric, Induction, 100% Usage"=1, "Electric, Induction, 80% Usage"=0,  "Electric, Induction, 120% Usage"=3)
+in_occupants_mapping <- c("1"=1  , "2"=2,"3"=3,"4"=4,"5"=5,"8"=8,"6"=6,"7"=7,"10+"=10,"9"=9)
+income_mapping <- c("<10000"=1, "10000-14999"=2, "15000-19999"=3, "20000-24999"=4, "25000-29999"=5, "30000-34999"=6, "35000-39999"=7, "40000-44999"=8, "45000-49999"=9, "50000-59999"=10, "60000-69999"=11, "70000-79999"=12, "80000-99999"=13, "100000-119999"=14, "120000-139999"=15, "140000-159999"=16, "160000-179999"=17, "180000-199999"=18, "200000+"=19)
+
+static_house_energy_weather_df2$time_of_day <-  as.numeric(time_of_day_mapping[static_house_energy_weather_df2$time_of_day])
+static_house_energy_weather_df2$in.vacancy_status <-  as.numeric(in_vacancy_status_mapping[static_house_energy_weather_df2$in.vacancy_status])
+static_house_energy_weather_df2$in.geometry_floor_area <-  as.numeric(in_geometry_floor_area_mapping[static_house_energy_weather_df2$in.geometry_floor_area])
+static_house_energy_weather_df2$in.hot_water_fixtures <-  as.numeric(in_hot_water_fixtures_mapping[static_house_energy_weather_df2$in.hot_water_fixtures])
+static_house_energy_weather_df2$upgrade.cooking_range <-  as.numeric(upgrade_cooking_range_mapping[static_house_energy_weather_df2$upgrade.cooking_range])
+static_house_energy_weather_df2$in.occupants <-  as.numeric(in_occupants_mapping[static_house_energy_weather_df2$in.occupants])
+str(static_house_energy_weather_df2$time_of_day)
+static_house_energy_weather_df2$in.income <-  as.numeric(income_mapping[static_house_energy_weather_df2$in.occupants])
+str(static_house_energy_weather_df2$in.income)
+
+
+# Remove negative Target
+static_house_energy_weather_df2 <-  static_house_energy_weather_df2 %>% filter(total_energy_consumption>=0)
+dim(static_house_energy_weather_df2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###2.4.
+#### Calculate Percentage of nulls in each row - Remove those greater than 80%.
+#### Fill Categorical Nulls with mode at Country - Income Level.
+#### Remove any remaining Null rows, if any.
+```{r}
+static_house_energy_weather_df3 <-  static_house_energy_weather_df2
+
+# Function to calculate percentage of nulls in each column
+percentage_nulls <- function(column) {
+  sum(is.na(column)) / length(column) * 100
+}
+
+# Apply the function to each column
+column_null_percentage <- sapply(static_house_energy_weather_df3, percentage_nulls)
+
+# Extract columns with more than 80% nulls
+columns_above_threshold <- names(column_null_percentage[column_null_percentage < 80])
+
+# Extract only those columns from the original data frame
+static_house_energy_weather_df3 <- static_house_energy_weather_df3[, columns_above_threshold]
+
+# dim(static_house_energy_weather_df3)
+
+
+# Function to fill missing values with the mode within each group
+fill_mode <- function(x) {
+  if (is.character(x)) {
+    mode_table <- table(x)
+    if (length(mode_table) > 0) {
+      mode_val <- names(sort(mode_table, decreasing = TRUE))[1]
+      x[is.na(x)] <- mode_val
+    }
+  }
+  x
+}
+
+# Apply the fill_mode function to each character column within each group
+static_house_energy_weather_df3 <- static_house_energy_weather_df3 %>%
+  group_by(in.city,in.income) %>%
+  mutate(across(where(is.character), fill_mode))
+
+# Apply the fill_mode function again to those that do not have a mode inside a group
+static_house_energy_weather_df3 <- static_house_energy_weather_df3 %>%
+  mutate(across(where(is.character), fill_mode))
+
+
+
+# Drop NA Rows - 90% of rows remaining
+static_house_energy_weather_df3 <-  na.omit(static_house_energy_weather_df3)
+dim(static_house_energy_weather_df3)
+
+
+column_null_percentage <- sapply(static_house_energy_weather_df3, percentage_nulls)
+
+```
+
+
+##----------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+### 3.3.Exploratory Data Analysis
+
+#### 3.1.Distribution of Target Variable - Total Energy Consumption
+####     -> It is observed that target variable is slightly right-skewed.
+
+
+
+
+```{r}
+
+# Histogram plot
+hist(static_house_energy_weather_df3$total_energy_consumption, col='purple', border='black', breaks=50,
+     main='Total Energy Consumption Distribution', xlab='Total Energy Consumption', ylab='Frequency')
+
+```
+
+#### 3.2 Distribution of Continuous Independanct Features
+```{r}
+# Histogram plot -> dry_bulb_temperature_
+hist(static_house_energy_weather_df3$`dry_bulb_temperature_[°c]`, col='purple', border='black', breaks=50,
+     main='Dry Bulb Temparature Distribution', xlab='Dry Bulb Temparature', ylab='Frequency')
+# Histogram plot -> global_horizontal_radiation_
+hist(static_house_energy_weather_df3$`global_horizontal_radiation_[w/m2]`, col='purple', border='black', breaks=50,
+     main='Global Horizontal Radiation Distribution', xlab='Global Horizontal Radiation', ylab='Frequency')
+# Histogram plot -> in.sqft
+hist(static_house_energy_weather_df3$in.sqft, col='purple', border='black', breaks=50,
+     main='Size of House Distribution', xlab='Size of House', ylab='Frequency')
+# Histogram plot -> Income
+hist(static_house_energy_weather_df3$in.income, col='purple', border='black', breaks=50,
+     main='Income Distribution', xlab='Income', ylab='Frequency')
+
+# Histogram plot -> Colling Setpoint
+hist(static_house_energy_weather_df3$in.cooling_setpoint, col='purple', border='black', breaks=50,
+     main='Cooling Setpoint Distribution', xlab='Cooling Setpoint', ylab='Frequency')
+
+# Histogram plot -> Colling Setpoint
+hist(static_house_energy_weather_df3$in.hot_water_fixtures, col='purple', border='black', breaks=50,
+     main='Hot Water Fixtures Distribution', xlab='Hot Water Fixtures Setpoint', ylab='Frequency')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### 3.3. Study Correlation between Continuous Features
+#### Raditation and Humidity and Highly Negatively Correlated
+#### Wind Speed and Radiation have a High Positive Correlation
+```{r}
+# Select only the numerical variables from the dataset
+numerical_vars <- static_house_energy_weather_df3[sapply(static_house_energy_weather_df3, is.numeric)]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(numerical_vars)
+# Set a threshold for correlation values
+threshold <- 0.4
+
+# Filter correlation matrix for values above the threshold
+filtered_cor_matrix <- cor_matrix * (abs(cor_matrix) > threshold)
+
+corrplot(filtered_cor_matrix, method = "number", type = "upper", tl.col = "black", tl.srt = 45, tl.cex = 0.6, number.cex = 0.6,title = "Correlation Plot",number.digits = 2)
+par(mfrow = c(1, 1), mar = c(1,1,1,1) + 5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##----------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+
+
+
+### 4. Modelling
+
+#### Linear,Xgboost and Catboost were the three models that were used.
+#### XGBoost and Catboost gave thebest accuracy with a MAPE of 17% (83% accruracy).
+
+#### 4.1.Run Linear Regression - Run Linear Regression algorithm on Dataset
+```{r}
+# Drop a few columns based on correlation
+static_house_energy_weather_df4 <- static_house_energy_weather_df3
+
+static_house_energy_weather_df4 <- static_house_energy_weather_df4 %>%
+  select(where(~n_distinct(.) > 1))
+
+
+# Create dataset with just building_id and county - To be used in prediction section
+static_house_energy_weather_df_for_prediction <- static_house_energy_weather_df4 
+static_house_energy_weather_df_building_and_county <-  static_house_energy_weather_df4[,c('bldg_id','in.county','time_of_day')]
+static_house_energy_weather_df4 <-  static_house_energy_weather_df4 %>% select(-c( 'bldg_id','in.county','global_horizontal_radiation_[w/m2]',
+    'direct_normal_radiation_[w/m2]'))
+
+# lapply(static_house_energy_weather_df4, unique)
+
+rm(static_house_energy_weather_df)
+rm(static_house_energy_weather_df2)
+
+set.seed(123)
+
+# Split the data into training (80%) and testing (20%) sets
+index <- createDataPartition(static_house_energy_weather_df4$total_energy_consumption, p = 0.8, list = FALSE)
+train_data <- static_house_energy_weather_df4[index, ]
+test_data <- static_house_energy_weather_df4[-index, ]
+
+# Get character columns
+character_columns <- names(train_data)[sapply(train_data, is.character)]
+
+# Loop through character columns and apply the steps
+for (col in character_columns) {
+  # Get unique values in the current column
+
+  unique_values <- unique(train_data[[col]])
+
+  # Filter rows in other columns based on unique values
+  test_data <- test_data[test_data[[col]] %in% unique_values, ]
+}
+
+
+# Run linear regression with both categorical and continuous columns
+model <- lm(total_energy_consumption ~ ., data = train_data)
+
+# Print the summary of the model
+# summary(model)
+
+# Make predictions on the test data
+predictions <- predict(model, newdata = test_data)
+# test_data$predictions <- predictions
+# Evaluate the model on the test data (e.g., calculate RMSE)
+rmse <- sqrt(mean((test_data$total_energy_consumption - predictions)^2))
+print(paste("Root Mean Squared Error on test data:", rmse))
+cat("Minimum:", min(test_data$total_energy_consumption), "\n")
+cat("Maximum:", max(test_data$total_energy_consumption), "\n")
+cat("Mean:", mean(test_data$total_energy_consumption), "\n")
+# Calculate MAPE
+mape <- mean(abs((test_data$total_energy_consumption - predictions) / test_data$total_energy_consumption )) * 100
+
+# Print the result
+print(paste("MAPE:", mape))
+
+#R2
+r_squared <- R2(predictions, test_data$total_energy_consumption)
+print(paste("R-squared  Linear Regression:", r_squared))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### 4.2. Run CatBoost - Catboost is a Boosting Regression Model, 
+####      which specializes in handling categorical variables - which we have a lot of. 
+####      Boosting models are good at handling overfitting and non-linear data as they as equipped with
+####      regularization parameters and do not require prior coolumn scaling.
+
+```{r}
+# Create Train-Test Split
+train_data_ctb <- train_data
+test_data_ctb <- test_data
+# # Convert all character columns to factors - Need for Catboost
+# train_data_ctb[sapply(train_data_ctb, is.character)] <- lapply(train_data_ctb[sapply(train_data_ctb, is.character)], 
+#                                        as.factor)
+# test_data_ctb[sapply(test_data_ctb, is.character)] <- lapply(test_data_ctb[sapply(test_data_ctb, is.character)], 
+#                                        as.factor)
+
+# Identify character columns
+char_columns <- names(train_data_ctb)[sapply(train_data_ctb, is.character)]
+
+# Create a recipe for label encoding
+label_recipe <- recipe(~ ., data = train_data_ctb) %>%
+  step_dummy(all_nominal_predictors(), one_hot = FALSE)
+
+# Apply the label encoding recipe to the data
+train_data_ctb <- prep(label_recipe) %>% bake(new_data = train_data_ctb)
+
+# Apply the saved encoding recipe to the new data
+test_data_ctb <-prep(label_recipe) %>% bake(new_data = test_data_ctb)
+
+
+
+# Specify the columns for features and the response variable
+response <- "total_energy_consumption"
+
+# Select all columns except the excluded one
+selected_columns <- train_data_ctb[, !colnames(train_data_ctb) %in% response]
+
+# Convert the selected columns to a vector
+features <- colnames(selected_columns)
+
+# Convert response variable to numeric (CatBoost requires numeric target)
+train_data_ctb[[response]] <- as.numeric(train_data_ctb[[response]])
+
+# Convert the data to the CatBoost dataset format
+train_data_ctb2 <- catboost.load_pool(data = train_data_ctb[features], label = train_data_ctb[[response]])
+
+# Specify CatBoost parameters
+catboost_params <- list(
+  iterations = 100,  # Number of boosting iterations
+  learning_rate = 0.1,  # Learning rate
+  depth = 6,  # Depth of the trees
+  loss_function = "RMSE",  # Loss function for regression
+  logging_level = 'Silent'
+)
+
+# Train the CatBoost model
+# model <- catboost.train(train_data_ctb2, params = catboost_params)
+model <- catboost.train(train_data_ctb2,NULL, params = catboost_params)
+
+
+#Test Data
+new_data_pool <- catboost.load_pool(data = test_data_ctb)
+predictions_ctb <- catboost.predict(model, new_data_pool)
+
+
+#Catboost
+rmse <- sqrt(mean((test_data_ctb$total_energy_consumption - predictions_ctb)^2))
+print(paste("Root Mean Squared Error on test data:", rmse))
+cat("Minimum:", min(test_data_ctb$total_energy_consumption), "\n")
+cat("Maximum:", max(test_data_ctb$total_energy_consumption), "\n")
+cat("Mean:", mean(test_data_ctb$total_energy_consumption), "\n")
+# Calculate MAPE
+mape <- mean(abs((test_data_ctb$total_energy_consumption - predictions_ctb) / test_data_ctb$total_energy_consumption )) * 100
+
+# Print the result
+print(paste("MAPE:", mape))
+
+#R2
+r_squared <- R2(predictions_ctb, test_data_ctb$total_energy_consumption)
+print(paste("R-squared CTB:", r_squared))
+
+ctb_feature_imp_matrix <- catboost.get_feature_importance(model,
+                                pool = NULL,
+                                type = 'FeatureImportance',
+                                thread_count = -1)
+
+# convert the matrix into dataframe 
+dataframe_ctb_feature_imp=as.data.frame(ctb_feature_imp_matrix)
+colnames(dataframe_ctb_feature_imp) <- c("Feature_Importance")
+dataframe_ctb_feature_imp <- arrange(dataframe_ctb_feature_imp, desc(Feature_Importance))
+
+# Top Features from Catboost
+head(dataframe_ctb_feature_imp)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### 4.3, Run XGboost : Extreme Gradient Boosting model that is great at handling non-linear data.
+####      Boosting models are good at handling overfitting and non-linear data as they as equipped with
+####      regularization parameters and do not require prior coolumn scaling.
+
+```{r}
+# https://tilburgsciencehub.com/building-blocks/analyze-data/machine-learning/xgboost/
+
+#Use train-test split created before
+train_data_xgb <- train_data
+test_data_xgb <- test_data
+# Convert all character columns to factors 
+# train_data_xgb[sapply(train_data_xgb, is.character)] <- lapply(train_data_xgb[sapply(train_data_xgb, is.character)], 
+#                                        as.factor)
+# test_data_xgb[sapply(test_data_xgb, is.character)] <- lapply(test_data_xgb[sapply(test_data_xgb, is.character)], 
+#                                        as.factor)
+
+# Identify character columns
+char_columns <- names(train_data_xgb)[sapply(train_data_xgb, is.character)]
+
+# Create a recipe for label encoding
+label_recipe <- recipe(~ ., data = train_data_xgb) %>%
+  step_dummy(all_nominal_predictors(), one_hot = FALSE)
+
+# Apply the label encoding recipe to the data
+train_data_xgb <- prep(label_recipe) %>% bake(new_data = train_data_xgb)
+
+# Apply the saved encoding recipe to the new data
+test_data_xgb <-prep(label_recipe) %>% bake(new_data = test_data_xgb)
+
+# Define the parameter grid for hyperparameter tuning
+param_grid <- expand.grid(
+  nrounds = c(50, 100, 150),
+  max_depth = c(3, 6, 9),
+  eta = c(0.01, 0.05, 0.1),
+  gamma = c(0, 1, 2)
+)
+
+params <- list(
+  max_depth = 10,
+  min_child_weight = 1, 
+  gamma = 1,
+  eta = 0.1, 
+  colsample_bytree = 0.8, 
+  objective = "reg:squarederror", # Set the objective for regression
+  eval_metric = "rmse", # Use RMSE for evaluation
+  nrounds = 100 
+)
+response <- "total_energy_consumption"
+
+X_train <- train_data_xgb %>% select(-c("total_energy_consumption"))
+y_train <- train_data_xgb$total_energy_consumption
+X_test <-  test_data_xgb %>% select(-c("total_energy_consumption"))
+y_test <- test_data_xgb$total_energy_consumption
+
+#convert both sets to a DMatrix format, in order for xgboost to work with the data 
+dtrain <- xgb.DMatrix(data = as.matrix(X_train), label = y_train)
+dtest <- xgb.DMatrix(data = as.matrix(X_test), label = y_test)
+
+
+xgb_model <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = params$nrounds, 
+  early_stopping_rounds = 20, # stop iteration when there test set does not improve for 20 rounds
+  watchlist = list(train = dtrain, test = dtest),
+  verbose = 0 
+)
+
+predictions_xgb <- predict(xgb_model, newdata = dtest)
+
+#XGBoost
+rmse <- sqrt(mean((test_data_xgb$total_energy_consumption - predictions_xgb)^2))
+print(paste("Root Mean Squared Error on test data:", rmse))
+cat("Minimum:", min(test_data_xgb$total_energy_consumption), "\n")
+cat("Maximum:", max(test_data_xgb$total_energy_consumption), "\n")
+cat("Mean:", mean(test_data_xgb$total_energy_consumption), "\n")
+# Calculate MAPE
+mape <- mean(abs((test_data_xgb$total_energy_consumption - predictions_xgb) / test_data_xgb$total_energy_consumption )) * 100
+
+# Print the result
+print(paste("MAPE:", mape))
+
+#R2
+r_squared <- R2(predictions_xgb, test_data_xgb$total_energy_consumption)
+print(paste("R-squared XGB:", r_squared))
+
+#Plot XGB Feature IMportance
+importance_matrix <- xgb.importance(feature_names = colnames(X_train), model = xgb_model)
+xgb.plot.importance(importance_matrix,top_n = 20)
+importance_matrix <- importance_matrix[order(importance_matrix$Importance, decreasing = TRUE), ]
+top_15_features <-  importance_matrix$Feature[0:15]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##----------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+## 5. Insight Generation
+
+#### 1.Using Shapley to generate insights from the model.
+#### 2.Shapley calculates the indivdial effect of the features towards total energy consumption.
+#### 3.Analysing impact on Total energy consumption by studying Partial Dependance Plots and Feature Importance
+#### 4.Instructions on reading the graph:
+####    Understanding the y-axis:
+####        The y-axis represents the predicted outcome (total energy consumption) of the model.
+####        The 0 mark on the y-axis indicates average total energy consumption in the dataset
+####    Understanding the x-axis:
+####        The x-axis represents the values of the feature for which you are creating the Shapley PDP.
+#### 5.Some notable insights:
+####    a.Dry Bulb Temperature, House Size (sqft), Cooling and Heating Setpoint, Humidity are some of the top drivers of energy consumption.
+####    b. Income : People who earn more than $30,000, consume the same amount of energy (50kWh in an 8 hour time span).
+####    Below this income level, there is a steady decline in energy consumption as income reduces.
+####    c.Temperature : After the weather outside crosses a temperature of 26 C, there is a spike in energy consumption across household.
+
+```{r}
+#Create Shap object 
+
+shp <- shapviz(xgb_model, X_pred = dtrain, X = X_train)
+colnames(shp) <- gsub("_", " ", colnames(shp))
+# Function to capitalize each word before and after a full stop
+capitalize_words <- function(x) {
+  words <- unlist(strsplit(x, "\\.", fixed = TRUE))
+  capitalized_words <- sapply(words, str_to_title)
+  return(paste(capitalized_words, collapse = "."))
+}
+# Capitalize each word in column names
+colnames(shp) <- sapply(colnames(shp), capitalize_words)
+
+
+# Display Shapley Feature Importance
+sv_importance(shp)
+              
+# Feature Importance with Direction of impact 
+sv_importance(shp, kind = "beeswarm")
+
+
+# Main effect of carat and its interactions
+for (col in top_15_features){
+  col <- gsub("_", " ", col)
+  col <- sapply(col, capitalize_words)
+ impact_of_column_on_energy <-  sv_dependence(shp,v = col,color_var = col)
+ print(impact_of_column_on_energy)}
+
+# Key to map the x axis of below graphs
+time_of_day_mapping <-  c("morning"=1,"afternoon-evening"=2,"night"=3)
+in_vacancy_status_mapping <- c("Occupied"=1, "Vacant"=0 )
+in_geometry_floor_area_mapping <- c("0-499"=0 ,"500-749"=1,"750-999"=2,"1000-1499"=3,"1500-1999"=4,"2000-2499"=5,"2500-2999"=6,"3000-3999"=7,"4000+"=8)     
+in_hot_water_fixtures_mapping <- c("100% Usage"=1, "50% Usage"=0, "200% Usage"=2)
+upgrade_cooking_range_mapping <- c("Electric, Induction, 100% Usage"=1, "Electric, Induction, 80% Usage"=0,  "Electric, Induction, 120% Usage"=3)
+in_occupants_mapping <- c("1"=1  , "2"=2,"3"=3,"4"=4,"5"=5,"8"=8,"6"=6,"7"=7,"10+"=10,"9"=9)
+income_mapping <- c("<10000"=1, "10000-14999"=2, "15000-19999"=3, "20000-24999"=4, "25000-29999"=5, "30000-34999"=6, "35000-39999"=7, "40000-44999"=8, "45000-49999"=9, "50000-59999"=10, "60000-69999"=11, "70000-79999"=12, "80000-99999"=13, "100000-119999"=14, "120000-139999"=15, "140000-159999"=16, "160000-179999"=17, "180000-199999"=18, "200000+"=19)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##----------------------------------------------------------------------------------------------------------------------------------------------------------------->
+
+## 6. Predictions - By increasing temp by 5
+
+#### Add 5 degrees C to the Original Dataset, and Predict total Energy Consumed.
+
+#### Calculate peak Future Energy Demand for Geographies,House size and Time of the Day.
+#### Total energy predicted next july after increasing temparature by 5 degrees is:  5983238  kWh
+#### and increase in total energy consumed next july is : 927594.8  kWh Percentage increase in Energy Consumed is : 18.34771  %
+```{r}
+# Use prediction DF created in Linear Regression Section
+
+# -----------------> 
+static_house_energy_weather_df_for_prediction2 <- static_house_energy_weather_df_for_prediction
+static_house_energy_weather_df_building_and_county <-  static_house_energy_weather_df_for_prediction2[,c('bldg_id','in.county','time_of_day')]
+static_house_energy_weather_df_for_prediction2_processed_for_loaded_xgb_model <-  static_house_energy_weather_df_for_prediction2 %>% select(-c( 'bldg_id','in.county','global_horizontal_radiation_[w/m2]',
+    'direct_normal_radiation_[w/m2]'))
+
+# Encode it using the label_recipe encoder created in previous steps (xgb cell)
+static_house_energy_weather_df4_prediction <-  prep(label_recipe) %>% bake(new_data = static_house_energy_weather_df_for_prediction2_processed_for_loaded_xgb_model)
+
+
+#-----------------> Increase Temp by 5
+static_house_energy_weather_df4_prediction$`dry_bulb_temperature_[°c]` <- static_house_energy_weather_df4_prediction$`dry_bulb_temperature_[°c]`+5
+
+# Increase Temp by 5-> Create dataset to be converted to a martix for xgb prediction
+static_house_energy_weather_df4_prediction_independant <- static_house_energy_weather_df4_prediction %>% select (-c('total_energy_consumption'))
+static_house_energy_weather_df4_prediction_dependant <- static_house_energy_weather_df4_prediction$total_energy_consumption
+
+
+#Create matrix which is a pre-requisite to XGboost prediction
+static_house_energy_weather_df4_matrix <- xgb.DMatrix(data = as.matrix(static_house_energy_weather_df4_prediction_independant ), label = static_house_energy_weather_df4_prediction_dependant)
+predictions_plus_5_temp <- predict(xgb_model, newdata = static_house_energy_weather_df4_matrix)
+
+#Add prediction columns to original DF
+static_house_energy_weather_df_for_prediction2$total_energy_consumption_prediction_after_increasing_temp <- predictions_plus_5_temp
+
+#Predicted - Current = Increase in energy 
+static_house_energy_weather_df_for_prediction2$change_in_total_energy <-  static_house_energy_weather_df_for_prediction2$total_energy_consumption_prediction_after_increasing_temp - static_house_energy_weather_df_for_prediction2$total_energy_consumption 
+
+#TotalEnergy
+total_energy_next_july_after_increasing_temp <- sum(static_house_energy_weather_df_for_prediction2$total_energy_consumption_prediction_after_increasing_temp)
+
+total_change_in_energy_this_july_to_last_july <- sum(static_house_energy_weather_df_for_prediction2$change_in_total_energy)
+
+percentage_increase_in_energy_consumed <- total_change_in_energy_this_july_to_last_july*100/sum(static_house_energy_weather_df_for_prediction2$total_energy_consumption)
+
+cat("Total energy predicted next july after increasing temparature by 5 degrees is: ",total_energy_next_july_after_increasing_temp," kWh", " and increase in total energy consumed next july is :",total_change_in_energy_this_july_to_last_july," kWh")
+
+
+
+cat(" Percentage increase in Energy Consumed is :",percentage_increase_in_energy_consumed, " %")
+
+
+# #calculate peak energy demand for geographies and regions
+options(dplyr.summarise.inform = FALSE)
+time_of_day_reverse_mapping <-  c("1"="morning","2"="afternoon-evening","3"="night")
+
+geography_energy_demand_df <- static_house_energy_weather_df_for_prediction2 %>% 
+  group_by(in.county) %>%                           
+  dplyr::summarise(total_energy_prediction_next_year_per_hour = sum(total_energy_consumption_prediction_after_increasing_temp)/8, total_energy__consumption_this_year_per_hour = sum(total_energy_consumption)/8)
+
+geography_energy_demand_df$percentage_change_in_energy_consumption_per_hour <- (geography_energy_demand_df$total_energy_prediction_next_year_per_hour-geography_energy_demand_df$total_energy__consumption_this_year_per_hour)*100/geography_energy_demand_df$total_energy__consumption_this_year_per_hour 
+print(geography_energy_demand_df)
+
+
+## Calculating peak energy demand for sqft
+
+sqft_wise_energy_demand_df <- static_house_energy_weather_df_for_prediction2 %>% 
+  group_by(in.sqft) %>%                           
+  dplyr::summarise(total_energy_prediction_next_year_per_hour = sum(total_energy_consumption_prediction_after_increasing_temp)/8, total_energy__consumption_this_year_per_hour = sum(total_energy_consumption)/8)
+sqft_wise_energy_demand_df$percentage_change_in_energy_consumption <- (sqft_wise_energy_demand_df$total_energy_prediction_next_year_per_hour-sqft_wise_energy_demand_df$total_energy__consumption_this_year_per_hour)*100/sqft_wise_energy_demand_df$total_energy__consumption_this_year_per_hour
+print(sqft_wise_energy_demand_df)
+
+## Calculating peak energy demand for time of the day
+time_of_day_wise_energy_demand_df <- static_house_energy_weather_df_for_prediction2 %>% 
+  group_by(time_of_day) %>%                           
+  dplyr::summarise(total_energy_prediction_next_year_per_hour = sum(total_energy_consumption_prediction_after_increasing_temp)/8, total_energy__consumption_this_year_per_hour = sum(total_energy_consumption)/8)
+time_of_day_wise_energy_demand_df$time_of_day <- as.character(time_of_day_reverse_mapping[time_of_day_wise_energy_demand_df$time_of_day])
+
+time_of_day_wise_energy_demand_df$percentage_change_in_energy_consumption_per_hour <- (time_of_day_wise_energy_demand_df$total_energy_prediction_next_year_per_hour-time_of_day_wise_energy_demand_df$total_energy__consumption_this_year_per_hour)*100/time_of_day_wise_energy_demand_df$total_energy__consumption_this_year_per_hour
+
+
+
+print(time_of_day_wise_energy_demand_df)
+
+# write.csv(sqft_wise_energy_demand_df, file = "C:/Users/Himanshu/OneDrive/Desktop/Syracuse Sem 1/IST-687 Intro to DS Lab/Final Project/size_of_house_surge.csv",row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
